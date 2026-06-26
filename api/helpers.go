@@ -1,42 +1,18 @@
-package main
+package api
 
 import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"regexp"
 	"strconv"
-	"time"
 
-	"github.com/rs/zerolog"
+	"currency-exchange/models"
 )
-
-var log zerolog.Logger
-
-func initLogger() {
-	w := zerolog.ConsoleWriter{
-		Out:        os.Stdout,
-		TimeFormat: time.RFC3339,
-	}
-
-	lvl := os.Getenv("LOG_LEVEL")
-	if lvl == "" {
-		lvl = "info"
-	}
-
-	level, err := zerolog.ParseLevel(lvl)
-	if err != nil {
-		level = zerolog.InfoLevel
-	}
-
-	zerolog.SetGlobalLevel(level)
-	log = zerolog.New(w).With().Timestamp().Logger()
-}
 
 var currencyRegex = regexp.MustCompile(`^[A-Z]{3}$`)
 
-func validateConversionRequest(req *ConversionRequest) error {
+func validateConversionRequest(req *models.ConversionRequest) error {
 	if req.From == "" {
 		return fmt.Errorf("from currency is required")
 	}
@@ -79,5 +55,6 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, APIError{Code: status, Message: msg})
+	writeJSON(w, status, models.APIError{Code: status, Message: msg})
 }
+

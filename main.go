@@ -8,6 +8,11 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"currency-exchange/api"
+	"currency-exchange/cache"
+	"currency-exchange/database"
+	"currency-exchange/logger"
 )
 
 var (
@@ -30,22 +35,22 @@ func getEnv(key, fallback string) string {
 }
 
 func main() {
-	initLogger()
-	log.Info().Msg("starting currency exchange service")
+	logger.InitLogger()
+	logger.Log.Info().Msg("starting currency exchange service")
 
-	err := connectDB(dbHost, dbPort, dbUser, dbPassword, dbName)
+	err := database.ConnectDB(dbHost, dbPort, dbUser, dbPassword, dbName)
 	if err != nil {
-		log.Error().Err(err).Msg("failed to connect to database")
-		log.Info().Msg("running without database - history features wont work")
+		logger.Log.Error().Err(err).Msg("failed to connect to database")
+		logger.Log.Info().Msg("running without database - history features wont work")
 	} else {
-		defer closeDB()
-		log.Info().Msg("connected to MSSQL database")
+		defer database.CloseDB()
+		logger.Log.Info().Msg("connected to MSSQL database")
 	}
-	cache := newCacheService(redisAddr, redisPwd, 0)
-	if cache != nil {
-		defer cache.Close()
+	cacheSvc := cache.NewCacheService(redisAddr, redisPwd, 0)
+	if cacheSvc != nil {
+		defer cacheSvc.Close()
 	}
-	r := setupRouter(apiBaseURL, cache)
+	r := api.SetupRouter(apiBaseURL, cacheSvc)
 	srv := &http.Server{
 		Addr:         ":" + serverPort,
 		Handler:      r,
@@ -57,23 +62,23 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		log.Info().Msgf("server listening on :%s", serverPort)
+		logger.Log.Info().Msgf("server listening on :%s", serverPort)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error().Err(err).Msg("server error")
+			logger.Log.Error().Err(err).Msg("server error")
 			os.Exit(1)
 		}
 	}()
 
 	<-quit
 	fmt.Println()
-	log.Info().Msg("shutting down server...")
+	logger.Log.Info().Msg("shutting down server...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Error().Err(err).Msg("server forced to shutdown")
+		logger.Log.Error().Err(err).Msg("server forced to shutdown")
 	}
 
-	log.Info().Msg("server stopped")
+	logger.Log.Info().Msg("server stopped")
 }

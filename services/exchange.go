@@ -1,4 +1,4 @@
-package main
+package services
 
 import (
 	"context"
@@ -7,22 +7,26 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"currency-exchange/cache"
+	"currency-exchange/logger"
+	"currency-exchange/models"
 )
 
 type ExchangeService struct {
 	baseURL string
 	client  *http.Client
-	cache   *CacheService
+	cache   *cache.CacheService
 }
 
-func newExchangeService(baseURL string, cache *CacheService) *ExchangeService {
+func NewExchangeService(baseURL string, c *cache.CacheService) *ExchangeService {
 	return &ExchangeService{
 		baseURL: baseURL,
 		client:  &http.Client{Timeout: 10 * time.Second},
-		cache:   cache,
+		cache:   c,
 	}
 }
-func (s *ExchangeService) getLatestRates(base string) (*ExchangeRateResponse, error) {
+func (s *ExchangeService) GetLatestRates(base string) (*models.ExchangeRateResponse, error) {
 	cacheKey := "rates:" + base
 
 
@@ -30,9 +34,9 @@ func (s *ExchangeService) getLatestRates(base string) (*ExchangeRateResponse, er
 		ctx := context.Background()
 		cached, err := s.cache.Get(ctx, cacheKey)
 		if err == nil && cached != "" {
-			var data ExchangeRateResponse
+			var data models.ExchangeRateResponse
 			if json.Unmarshal([]byte(cached), &data) == nil {
-				log.Debug().Msgf("cache hit for %s", cacheKey)
+				logger.Log.Debug().Msgf("cache hit for %s", cacheKey)
 				return &data, nil
 			}
 		}
@@ -54,7 +58,7 @@ func (s *ExchangeService) getLatestRates(base string) (*ExchangeRateResponse, er
 		return nil, fmt.Errorf("failed to read response: %v", err)
 	}
 
-	var data ExchangeRateResponse
+	var data models.ExchangeRateResponse
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse response: %v", err)
@@ -65,11 +69,11 @@ func (s *ExchangeService) getLatestRates(base string) (*ExchangeRateResponse, er
 		s.cache.Set(ctx, cacheKey, string(body), 5*time.Minute)
 	}
 
-	log.Info().Msgf("fetched rates for %s from api", base)
+	logger.Log.Info().Msgf("fetched rates for %s from api", base)
 	return &data, nil
 }
 
-func (s *ExchangeService) getConversionRate(from, to string) (float64, error) {
+func (s *ExchangeService) GetConversionRate(from, to string) (float64, error) {
 	url := s.baseURL + "/latest?from=" + from + "&to=" + to
 	resp, err := s.client.Get(url)
 	if err != nil {
@@ -86,7 +90,7 @@ func (s *ExchangeService) getConversionRate(from, to string) (float64, error) {
 		return 0, fmt.Errorf("failed to read response: %v", err)
 	}
 
-	var data ExchangeRateResponse
+	var data models.ExchangeRateResponse
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse response: %v", err)

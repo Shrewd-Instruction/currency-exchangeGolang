@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"context"
@@ -6,17 +6,23 @@ import (
 	"net/http"
 	"time"
 
+	"currency-exchange/cache"
+	"currency-exchange/database"
+	"currency-exchange/logger"
+	"currency-exchange/models"
+	"currency-exchange/services"
+
 	"github.com/go-chi/chi/v5"
 )
 
-func handleGetRates(svc *ExchangeService) http.HandlerFunc {
+func handleGetRates(svc *services.ExchangeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		base := r.URL.Query().Get("base")
 		if base == "" {
 			base = "USD"
 		}
 
-		data, err := svc.getLatestRates(base)
+		data, err := svc.GetLatestRates(base)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -26,11 +32,11 @@ func handleGetRates(svc *ExchangeService) http.HandlerFunc {
 	}
 }
 
-func handleGetRatesByBase(svc *ExchangeService) http.HandlerFunc {
+func handleGetRatesByBase(svc *services.ExchangeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		base := chi.URLParam(r, "base")
 
-		data, err := svc.getLatestRates(base)
+		data, err := svc.GetLatestRates(base)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -40,9 +46,9 @@ func handleGetRatesByBase(svc *ExchangeService) http.HandlerFunc {
 	}
 }
 
-func handleConvert(svc *ExchangeService) http.HandlerFunc {
+func handleConvert(svc *services.ExchangeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var req ConversionRequest
+		var req models.ConversionRequest
 		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid request body")
@@ -55,7 +61,7 @@ func handleConvert(svc *ExchangeService) http.HandlerFunc {
 			return
 		}
 
-		rate, err := svc.getConversionRate(req.From, req.To)
+		rate, err := svc.GetConversionRate(req.From, req.To)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -63,7 +69,7 @@ func handleConvert(svc *ExchangeService) http.HandlerFunc {
 
 		result := req.Amount * rate
 
-		resp := ConversionResponse{
+		resp := models.ConversionResponse{
 			From:      req.From,
 			To:        req.To,
 			Amount:    req.Amount,
@@ -72,16 +78,16 @@ func handleConvert(svc *ExchangeService) http.HandlerFunc {
 			Timestamp: time.Now().Format(time.RFC3339),
 		}
 
-		if db != nil {
+		if database.DB != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 			defer cancel()
 
-			_, dbErr := db.ExecContext(ctx,
+			_, dbErr := database.DB.ExecContext(ctx,
 				"EXEC sp_InsertConversion @from_currency=@p1, @to_currency=@p2, @amount=@p3, @result=@p4, @rate=@p5",
 				req.From, req.To, req.Amount, result, rate,
 			)
 			if dbErr != nil {
-				log.Error().Err(dbErr).Msg("failed to save conversion to db")
+				logger.Log.Error().Err(dbErr).Msg("failed to save conversion to db")
 			}
 		}
 
@@ -91,7 +97,7 @@ func handleConvert(svc *ExchangeService) http.HandlerFunc {
 
 func handleGetHistory() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if db == nil {
+		if database.DB == nil {
 			writeError(w, http.StatusServiceUnavailable, "database not available")
 			return
 		}
@@ -117,20 +123,20 @@ func handleGetHistory() http.HandlerFunc {
 			toParam = to
 		}
 
-		rows, err := db.QueryContext(ctx,
+		rows, err := database.DB.QueryContext(ctx,
 			"EXEC sp_GetConversionHistory @from_currency=@p1, @to_currency=@p2, @limit=@p3",
 			fromParam, toParam, limit,
 		)
 		if err != nil {
-			log.Error().Err(err).Msg("failed to query history")
+			logger.Log.Error().Err(err).Msg("failed to query history")
 			writeError(w, http.StatusInternalServerError, "failed to fetch history")
 			return
 		}
 		defer rows.Close()
 
-		var history []ConversionHistory
+		var history []models.ConversionHistory
 		for rows.Next() {
-			var row ConversionHistory
+			var row models.ConversionHistory
 			err = rows.Scan(&row.ID, &row.From, &row.To, &row.Amount, &row.Result, &row.Rate, &row.CreatedAt)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "failed to read data")
@@ -140,29 +146,29 @@ func handleGetHistory() http.HandlerFunc {
 		}
 
 		if history == nil {
-			history = []ConversionHistory{}
+			history = []models.ConversionHistory{}
 		}
 
 		writeJSON(w, http.StatusOK, history)
 	}
 }
 
-func handleHealth(cache *CacheService, apiURL string) http.HandlerFunc {
+func handleHealth(cacheSvc *cache.CacheService, apiURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		status := map[string]string{
 			"status": "healthy",
 		}
 		dbStatus := "down"
-		if db != nil {
+		if database.DB != nil {
 			ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 			defer cancel()
-			if db.PingContext(ctx) == nil {
+			if database.DB.PingContext(ctx) == nil {
 				dbStatus = "up"
 			}
 		}
 		status["database"] = dbStatus
 		redisStatus := "down"
-		if cache != nil && cache.Ping() == nil {
+		if cacheSvc != nil && cacheSvc.Ping() == nil {
 			redisStatus = "up"
 		}
 		status["redis"] = redisStatus

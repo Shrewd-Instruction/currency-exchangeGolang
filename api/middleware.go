@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/json"
@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"currency-exchange/logger"
+	"currency-exchange/models"
 )
 
 type wrappedWriter struct {
@@ -26,7 +29,7 @@ func requestLogger(next http.Handler) http.Handler {
 		next.ServeHTTP(wrapped, r)
 
 		duration := time.Since(start)
-		log.Info().Msgf("%s %s %d %v", r.Method, r.URL.Path, wrapped.statusCode, duration)
+		logger.Log.Info().Msgf("%s %s %d %v", r.Method, r.URL.Path, wrapped.statusCode, duration)
 	})
 }
 
@@ -71,7 +74,7 @@ func rateLimiter(maxReqs int, window time.Duration) func(http.Handler) http.Hand
 			if v.count > maxReqs {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusTooManyRequests)
-				json.NewEncoder(w).Encode(APIError{
+				json.NewEncoder(w).Encode(models.APIError{
 					Code:    429,
 					Message: fmt.Sprintf("rate limit exceeded, max %d requests per %v", maxReqs, window),
 				})

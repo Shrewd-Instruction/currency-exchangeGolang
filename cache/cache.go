@@ -1,9 +1,11 @@
-package main
+package cache
 
 import (
 	"context"
 	"fmt"
 	"time"
+
+	"currency-exchange/logger"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -12,7 +14,7 @@ type CacheService struct {
 	client *redis.Client
 }
 
-func newCacheService(addr, password string, db int) *CacheService {
+func NewCacheService(addr, password string, db int) *CacheService {
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
@@ -22,11 +24,11 @@ func newCacheService(addr, password string, db int) *CacheService {
 	ctx := context.Background()
 	err := rdb.Ping(ctx).Err()
 	if err != nil {
-		log.Warn().Msgf("redis not available: %v", err)
+		logger.Log.Warn().Msgf("redis not available: %v", err)
 		return &CacheService{client: nil}
 	}
 
-	log.Info().Msgf("connected to redis at %s", addr)
+	logger.Log.Info().Msgf("connected to redis at %s", addr)
 	return &CacheService{client: rdb}
 }
 

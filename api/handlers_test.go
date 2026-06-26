@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/json"
@@ -6,11 +6,16 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"currency-exchange/database"
+	"currency-exchange/logger"
+	"currency-exchange/models"
+	"currency-exchange/services"
 )
 
 func mockAPI() *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := ExchangeRateResponse{
+		resp := models.ExchangeRateResponse{
 			Amount: 1,
 			Base:   "USD",
 			Date:   "2024-01-15",
@@ -27,11 +32,11 @@ func mockAPI() *httptest.Server {
 }
 
 func TestHandleGetRates(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := mockAPI()
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
+	svc := services.NewExchangeService(ts.URL, nil)
 	handler := handleGetRates(svc)
 
 	req := httptest.NewRequest("GET", "/api/v1/rates?base=USD", nil)
@@ -43,7 +48,7 @@ func TestHandleGetRates(t *testing.T) {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
 
-	var resp ExchangeRateResponse
+	var resp models.ExchangeRateResponse
 	json.NewDecoder(rr.Body).Decode(&resp)
 
 	if resp.Base != "USD" {
@@ -55,11 +60,11 @@ func TestHandleGetRates(t *testing.T) {
 }
 
 func TestHandleGetRates_DefaultBase(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := mockAPI()
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
+	svc := services.NewExchangeService(ts.URL, nil)
 	handler := handleGetRates(svc)
 
 	req := httptest.NewRequest("GET", "/api/v1/rates", nil)
@@ -73,11 +78,11 @@ func TestHandleGetRates_DefaultBase(t *testing.T) {
 }
 
 func TestHandleConvert(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := mockAPI()
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
+	svc := services.NewExchangeService(ts.URL, nil)
 	handler := handleConvert(svc)
 
 	body := `{"from": "USD", "to": "EUR", "amount": 100}`
@@ -91,7 +96,7 @@ func TestHandleConvert(t *testing.T) {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
 
-	var resp ConversionResponse
+	var resp models.ConversionResponse
 	json.NewDecoder(rr.Body).Decode(&resp)
 
 	if resp.From != "USD" || resp.To != "EUR" {
@@ -105,11 +110,11 @@ func TestHandleConvert(t *testing.T) {
 }
 
 func TestHandleConvert_BadJSON(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := mockAPI()
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
+	svc := services.NewExchangeService(ts.URL, nil)
 	handler := handleConvert(svc)
 
 	req := httptest.NewRequest("POST", "/api/v1/convert", strings.NewReader("{bad json}"))
@@ -123,11 +128,11 @@ func TestHandleConvert_BadJSON(t *testing.T) {
 }
 
 func TestHandleConvert_InvalidAmount(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := mockAPI()
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
+	svc := services.NewExchangeService(ts.URL, nil)
 	handler := handleConvert(svc)
 
 	body := `{"from": "USD", "to": "EUR", "amount": 0}`
@@ -142,8 +147,8 @@ func TestHandleConvert_InvalidAmount(t *testing.T) {
 }
 
 func TestHandleHistory_NoDB(t *testing.T) {
-	initLogger()
-	db = nil
+	logger.InitLogger()
+	database.DB = nil
 	handler := handleGetHistory()
 
 	req := httptest.NewRequest("GET", "/api/v1/history", nil)
@@ -159,17 +164,17 @@ func TestHandleHistory_NoDB(t *testing.T) {
 func TestValidateConversionRequest(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     ConversionRequest
+		req     models.ConversionRequest
 		wantErr bool
 	}{
-		{"valid", ConversionRequest{From: "USD", To: "EUR", Amount: 100}, false},
-		{"empty from", ConversionRequest{From: "", To: "EUR", Amount: 100}, true},
-		{"empty to", ConversionRequest{From: "USD", To: "", Amount: 100}, true},
-		{"zero amount", ConversionRequest{From: "USD", To: "EUR", Amount: 0}, true},
-		{"negative amount", ConversionRequest{From: "USD", To: "EUR", Amount: -50}, true},
-		{"bad from code", ConversionRequest{From: "US", To: "EUR", Amount: 100}, true},
-		{"lowercase", ConversionRequest{From: "usd", To: "EUR", Amount: 100}, true},
-		{"numbers in code", ConversionRequest{From: "USD", To: "E2R", Amount: 100}, true},
+		{"valid", models.ConversionRequest{From: "USD", To: "EUR", Amount: 100}, false},
+		{"empty from", models.ConversionRequest{From: "", To: "EUR", Amount: 100}, true},
+		{"empty to", models.ConversionRequest{From: "USD", To: "", Amount: 100}, true},
+		{"zero amount", models.ConversionRequest{From: "USD", To: "EUR", Amount: 0}, true},
+		{"negative amount", models.ConversionRequest{From: "USD", To: "EUR", Amount: -50}, true},
+		{"bad from code", models.ConversionRequest{From: "US", To: "EUR", Amount: 100}, true},
+		{"lowercase", models.ConversionRequest{From: "usd", To: "EUR", Amount: 100}, true},
+		{"numbers in code", models.ConversionRequest{From: "USD", To: "E2R", Amount: 100}, true},
 	}
 
 	for _, tt := range tests {
@@ -194,6 +199,34 @@ func TestValidateCurrencyCode(t *testing.T) {
 	for _, code := range bad {
 		if validateCurrencyCode(code) {
 			t.Errorf("%s should be invalid", code)
+		}
+	}
+}
+
+func TestValidateLimit_Service(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    int
+		wantErr bool
+	}{
+		{"25", 25, false},
+		{"1", 1, false},
+		{"100", 100, false},
+		{"", 50, false},
+		{"150", 0, true},
+		{"0", 0, true},
+		{"-5", 0, true},
+		{"abc", 0, true},
+	}
+
+	for _, tt := range tests {
+		got, err := validateLimit(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("validateLimit(%q) err=%v, wantErr=%v", tt.input, err, tt.wantErr)
+			continue
+		}
+		if !tt.wantErr && got != tt.want {
+			t.Errorf("validateLimit(%q) = %d, want %d", tt.input, got, tt.want)
 		}
 	}
 }

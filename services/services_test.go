@@ -1,16 +1,19 @@
-package main
+package services
 
 import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"currency-exchange/logger"
+	"currency-exchange/models"
 )
 
 func TestGetLatestRates_Service(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := ExchangeRateResponse{
+		resp := models.ExchangeRateResponse{
 			Amount: 1, Base: "EUR", Date: "2024-01-15",
 			Rates: map[string]float64{"USD": 1.09, "GBP": 0.86},
 		}
@@ -18,8 +21,8 @@ func TestGetLatestRates_Service(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
-	resp, err := svc.getLatestRates("EUR")
+	svc := NewExchangeService(ts.URL, nil)
+	resp, err := svc.GetLatestRates("EUR")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -32,23 +35,23 @@ func TestGetLatestRates_Service(t *testing.T) {
 }
 
 func TestGetLatestRates_ServerError(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(500)
 	}))
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
-	_, err := svc.getLatestRates("USD")
+	svc := NewExchangeService(ts.URL, nil)
+	_, err := svc.GetLatestRates("USD")
 	if err == nil {
 		t.Error("expected error for 500, got nil")
 	}
 }
 
 func TestGetConversionRate_Service(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := ExchangeRateResponse{
+		resp := models.ExchangeRateResponse{
 			Amount: 1, Base: "USD", Date: "2024-01-15",
 			Rates: map[string]float64{"EUR": 0.92},
 		}
@@ -56,8 +59,8 @@ func TestGetConversionRate_Service(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
-	rate, err := svc.getConversionRate("USD", "EUR")
+	svc := NewExchangeService(ts.URL, nil)
+	rate, err := svc.GetConversionRate("USD", "EUR")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -67,9 +70,9 @@ func TestGetConversionRate_Service(t *testing.T) {
 }
 
 func TestGetConversionRate_NotFound(t *testing.T) {
-	initLogger()
+	logger.InitLogger()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		resp := ExchangeRateResponse{
+		resp := models.ExchangeRateResponse{
 			Amount: 1, Base: "USD", Date: "2024-01-15",
 			Rates: map[string]float64{},
 		}
@@ -77,37 +80,9 @@ func TestGetConversionRate_NotFound(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	svc := newExchangeService(ts.URL, nil)
-	_, err := svc.getConversionRate("USD", "XYZ")
+	svc := NewExchangeService(ts.URL, nil)
+	_, err := svc.GetConversionRate("USD", "XYZ")
 	if err == nil {
 		t.Error("expected error for missing rate")
-	}
-}
-
-func TestValidateLimit_Service(t *testing.T) {
-	tests := []struct {
-		input   string
-		want    int
-		wantErr bool
-	}{
-		{"25", 25, false},
-		{"1", 1, false},
-		{"100", 100, false},
-		{"", 50, false},
-		{"150", 0, true},
-		{"0", 0, true},
-		{"-5", 0, true},
-		{"abc", 0, true},
-	}
-
-	for _, tt := range tests {
-		got, err := validateLimit(tt.input)
-		if (err != nil) != tt.wantErr {
-			t.Errorf("validateLimit(%q) err=%v, wantErr=%v", tt.input, err, tt.wantErr)
-			continue
-		}
-		if !tt.wantErr && got != tt.want {
-			t.Errorf("validateLimit(%q) = %d, want %d", tt.input, got, tt.want)
-		}
 	}
 }

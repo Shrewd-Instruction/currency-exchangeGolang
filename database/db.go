@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 	_ "github.com/denisenkom/go-mssqldb"
 )
 
-var db *sql.DB
+var DB *sql.DB
 
-func connectDB(host, port, user, password, dbname string) error {
+func ConnectDB(host, port, user, password, dbname string) error {
 	connStr := fmt.Sprintf("server=%s;port=%s;user id=%s;password=%s;database=%s",
 		host, port, user, password, dbname)
 
 	var err error
-	db, err = sql.Open("sqlserver", connStr)
+	DB, err = sql.Open("sqlserver", connStr)
 	if err != nil {
 		return fmt.Errorf("failed to open db: %v", err)
 	}
@@ -24,7 +24,7 @@ func connectDB(host, port, user, password, dbname string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	err = db.PingContext(ctx)
+	err = DB.PingContext(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to ping db: %v", err)
 	}
@@ -32,8 +32,8 @@ func connectDB(host, port, user, password, dbname string) error {
 	return nil
 }
 
-func closeDB() {
-	if db != nil {
-		db.Close()
+func CloseDB() {
+	if DB != nil {
+		DB.Close()
 	}
 }
