@@ -1,0 +1,64 @@
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      mssql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - SERVER_PORT=8080
+      - DB_HOST=mssql
+      - DB_PORT=1433
+      - DB_USER=sa
+      - DB_PASSWORD=sqlPass!223!!
+      - DB_NAME=currency_exchange
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - API_BASE_URL=https://api.frankfurter.app
+    networks:
+      - app-network
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=sqlPass!223!!
+      - MSSQL_PID=Express
+    volumes:
+      - mssql-data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "sqlPass!223!!" -C -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - redis-data:/data
+    networks:
+      - app-network
+
+volumes:
+  mssql-data:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge
