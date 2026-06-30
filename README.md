@@ -21,9 +21,14 @@ GET http://localhost:8080/api/v1/rates
 GET http://localhost:8080/api/v1/rates/EUR
 
 POST http://localhost:8080/api/v1/convert
+
 {
+    
     "from": "USD",
+
     "to": "EUR",
+
     "amount": 467
+
 }
 GET http://localhost:8080/api/v1/history?from=USD&limit=5
