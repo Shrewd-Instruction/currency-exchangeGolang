@@ -31,4 +31,5 @@ POST http://localhost:8080/api/v1/convert
     "amount": 467
 
 }
+
 GET http://localhost:8080/api/v1/history?from=USD&limit=5
