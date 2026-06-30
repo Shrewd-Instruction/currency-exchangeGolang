@@ -17,7 +17,9 @@ GET http://localhost:8080/api/v1/health
 
 postman examples:
 GET http://localhost:8080/api/v1/rates
+
 GET http://localhost:8080/api/v1/rates/EUR
+
 POST http://localhost:8080/api/v1/convert
 {
     "from": "USD",
