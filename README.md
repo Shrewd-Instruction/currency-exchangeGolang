@@ -4,7 +4,9 @@ go api to get currency exchange rates from frankfurter api and cache with redis
 
 docker:
 docker-compose up --build -d
+
 docker cp setup.sql currency-exchange-mssql-1:/tmp/setup.sql
+
 docker exec currency-exchange-mssql-1 /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "sqlPass!223!!" -C -i /tmp/setup.sql
 
 without docker:
@@ -20,6 +22,6 @@ POST http://localhost:8080/api/v1/convert
 {
     "from": "USD",
     "to": "EUR",
-    "amount": 100
+    "amount": 467
 }
 GET http://localhost:8080/api/v1/history?from=USD&limit=5
